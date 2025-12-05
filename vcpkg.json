@@ -1,0 +1,20 @@
+{
+  "dependencies": [
+    "fmt",
+    {
+      "name": "glad",
+      "features": [
+        "gl-api-44"
+      ]
+    },
+    {
+      "name": "glfw3",
+      "features": [
+        "wayland"
+      ]
+    },
+    "glm",
+    "opengl",
+    "freetype"
+  ]
+}

@@ -46,6 +46,47 @@ public:
 
 std::vector<Circle> circles;
 
+// Based on: https://math.stackexchange.com/questions/3100828/calculate-the-circle-that-touches-three-other-circles
+Circle * find_touching_circle(Circle *c1, Circle *c2, Circle *c3, int s1, int s2, int s3)
+{
+    float r1 = s1 * c1->radius;
+    float r2 = s2 * c2->radius;
+    float r3 = s3 * c3->radius;
+
+    float x1 = c1->position.x;
+    float y1 = c1->position.y;
+    float x2 = c2->position.x;
+    float y2 = c2->position.y;
+    float x3 = c3->position.x;
+    float y3 = c3->position.y;
+
+    fmt::println("r1={}, r2={}, r3={}", r1, r2, r3);
+
+    float k_a = -glm::pow(r1, 2) + glm::pow(r2, 2) + glm::pow(x1, 2) - glm::pow(x2, 2) + glm::pow(y1, 2) - glm::pow(y2, 2);
+    float k_b = -glm::pow(r1, 2) + glm::pow(r3, 2) + glm::pow(x1, 2) - glm::pow(x3, 2) + glm::pow(y1, 2) - glm::pow(y3, 2);
+
+    float d = x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2);
+    float a0 = (k_a * (y1 - y3) + k_b * (y2 - y1)) / (2 * d);
+    float b0 = -(k_a * (x1 - x3) + k_b * (x2 - x1)) / (2 * d);
+
+    float a1 = -(r1 * (y2 - y3) + r2 * (y3 - y1) + r3 * (y1 - y2)) / d;
+    float b1 = (r1 * (x2 - x3) + r2 * (x3 - x1) + r3 * (x1 - x2)) / d;
+
+    // float C0 = glm::pow(a0 - x1, 2) + glm::pow(b0 - y1, 2) - glm::pow(r1, 2);
+    float C0 = glm::pow(a0, 2) - 2 * a0 * x1 + glm::pow(b0, 2) - 2 * b0 * y1 - glm::pow(r1, 2) + glm::pow(x1, 2) + glm::pow(y1, 2);
+    // float C1 = a1 * (a0 - x1) + b1 * (b0 - y1) - r1;
+    float C1 = a0 * a1 - a1 * x1 + b0 * b1 - b1 * y1 - r1;
+    float C2 = glm::pow(a1, 2) + glm::pow(b1, 2) - 1;
+
+    float r = (-glm::sqrt(glm::pow(C1, 2) - C0 * C2) - C1)/ C2;
+
+    float x = a0 + a1 * r;
+    float y = b0 + b1 * r;
+
+    return new Circle(r, glm::vec2(x, y));
+}
+
+
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
     window_width = width;

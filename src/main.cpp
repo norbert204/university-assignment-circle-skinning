@@ -31,11 +31,25 @@ struct TouchingCircle
     glm::vec2 position;
 };
 
+struct CircleExternalTangentPoints
+{
+    glm::vec2 c1_p1;
+    glm::vec2 c2_p1;
+    glm::vec2 c1_p2;
+    glm::vec2 c2_p2;
+};
+
 struct RadicalLine
 {
     float a;
     float b;
     float c;
+};
+
+struct SeparatedPoints
+{
+    glm::vec2 left_point;
+    glm::vec2 right_point;
 };
 
 class Circle
@@ -168,6 +182,21 @@ TouchingCircle * find_touching_circle(Circle *c1, Circle *c2, Circle *c3, int s1
     float y = b0 + b1 * r;
 
     return new TouchingCircle{r, glm::vec2(x, y)};
+}
+
+CircleExternalTangentPoints * get_tangent_points(glm::vec2 c1_pos, float r1, glm::vec2 c2_pos, float r2)
+{
+    auto d = c2_pos - c1_pos;
+    auto l = glm::length(d);
+    auto u = d / l;
+    auto v = glm::vec2(-d.y / l, d.x / l);
+
+    auto p1 = c1_pos + r1 * ((r2 - r1) * u + l * v) / l;
+    auto p2 = c2_pos + r2 * ((r2 - r1) * u + l * v) / l;
+    auto p3 = c1_pos + r1 * ((r2 - r1) * u + l * -1 * v) / l;
+    auto p4 = c2_pos + r2 * ((r2 - r1) * u + l * -1 * v) / l;
+
+    return new CircleExternalTangentPoints{p1, p2, p3, p4};
 }
 
 bool get_if_circles_touch_externally_or_internally(glm::vec2 common_circle_pos, float common_circle_radius, glm::vec2 circle_pos, float circle_radius)
@@ -322,6 +351,59 @@ std::tuple<glm::vec2, glm::vec2> calculate_tangents(glm::vec2 c1_pos, float r1, 
     return std::make_tuple(tangent1, tangent2);
 }
 
+SeparatedPoints * separate_points(glm::vec2 point1, glm::vec2 point2, int index)
+{
+    auto radical_center = find_radical_center(
+        circles[index].position, circles[index].radius,
+        circles[index - 1].position, circles[index - 1].radius,
+        circles[index + 1].position, circles[index + 1].radius);
+
+    point_circles.push_back(Circle(SKIN_POINT_SIZE, radical_center, glm::vec3(0.0f, 1.0f, 1.0f)));
+
+    glm::vec2 to_check = circles[index].position - circles[index - 1].position;
+    glm::vec2 check_against = circles[index + 1].position - circles[index - 1].position;
+
+    float dot = to_check.x * check_against.x + to_check.y * check_against.y;
+    float det = to_check.x * check_against.y - to_check.y * check_against.x;
+
+    float angle = glm::atan(det, dot);
+
+    auto p1_radical_distance = glm::distance(radical_center, point1);
+    auto p2_radical_distance = glm::distance(radical_center, point2);
+
+    glm::vec2 left;
+    glm::vec2 right;
+
+    if (angle < 0)
+    {
+        if (p1_radical_distance < p2_radical_distance)
+        {
+            left = (point1);
+            right = (point2);
+        }
+        else
+    {
+            left = (point2);
+            right = (point1);
+        }
+    }
+    else
+    {
+        if (p1_radical_distance < p2_radical_distance)
+        {
+            left = (point2);
+            right = (point1);
+        }
+        else
+    {
+            left = (point1);
+            right = (point2);
+        }
+    }
+
+    return new SeparatedPoints{left, right };
+}
+
 void calculate_skin()
 {
     if (circles.size() < 4)
@@ -336,88 +418,57 @@ void calculate_skin()
     std::vector<glm::vec2> left_points;
     std::vector<glm::vec2> right_points;
 
+    auto first_points = get_tangent_points(
+        circles[0].position, circles[0].radius,
+        circles[1].position, circles[1].radius);
+
+    auto separate_points_first = separate_points(first_points->c1_p1, first_points->c1_p2, 0);
+    left_points.push_back(separate_points_first->left_point);
+    point_circles.push_back(Circle(SKIN_POINT_SIZE, separate_points_first->left_point, LEFT_COLOR));
+    right_points.push_back(separate_points_first->right_point);
+    point_circles.push_back(Circle(SKIN_POINT_SIZE, separate_points_first->right_point, RIGHT_COLOR));
+
+    delete first_points;
+    delete separate_points_first;
+
     for (auto i = 1; i < circles.size() - 1; i++)
     {
         auto points = find_curve_points_for_circle(i);
 
-        auto radical_center = find_radical_center(
-            circles[i].position, circles[i].radius,
-            circles[i - 1].position, circles[i - 1].radius,
-            circles[i + 1].position, circles[i + 1].radius);
+        auto separated_points = separate_points(std::get<0>(points), std::get<1>(points), i);
 
-        point_circles.push_back(Circle(SKIN_POINT_SIZE, radical_center, glm::vec3(0.0f, 1.0f, 1.0f)));
+        left_points.push_back(separated_points->left_point);
+        point_circles.push_back(Circle(SKIN_POINT_SIZE, separated_points->left_point, LEFT_COLOR));
+        right_points.push_back(separated_points->right_point);
+        point_circles.push_back(Circle(SKIN_POINT_SIZE, separated_points->right_point, RIGHT_COLOR));
 
-        glm::vec2 to_check = circles[i].position - circles[i - 1].position;
-        glm::vec2 check_against = circles[i + 1].position - circles[i - 1].position;
-
-        float dot = to_check.x * check_against.x + to_check.y * check_against.y;
-        float det = to_check.x * check_against.y - to_check.y * check_against.x;
-
-        float angle = glm::atan(det, dot);
-
-        auto p1_radical_distance = glm::distance(radical_center, std::get<0>(points));
-        auto p2_radical_distance = glm::distance(radical_center, std::get<1>(points));
-
-        glm::vec2 left;
-        glm::vec2 right;
-
-        if (angle < 0)
-        {
-            if (p1_radical_distance < p2_radical_distance)
-            {
-                left = (std::get<0>(points));
-                right = (std::get<1>(points));
-            }
-            else
-            {
-                left = (std::get<1>(points));
-                right = (std::get<0>(points));
-            }
-        }
-        else
-        {
-            if (p1_radical_distance < p2_radical_distance)
-            {
-                left = (std::get<1>(points));
-                right = (std::get<0>(points));
-            }
-            else
-            {
-                left = (std::get<0>(points));
-                right = (std::get<1>(points));
-            }
-        }
-
-        // if (angle > 0)
-        // {
-        //     left = std::get<0>(points);
-        //     right = std::get<1>(points);
-        // }
-        // else
-        // {
-        //     left = std::get<1>(points);
-        //     right = std::get<0>(points);
-        // }
-
-        left_points.push_back(left);
-        point_circles.push_back(Circle(SKIN_POINT_SIZE, left, LEFT_COLOR));
-        right_points.push_back(right);
-        point_circles.push_back(Circle(SKIN_POINT_SIZE, right, RIGHT_COLOR));
-
+        delete separated_points;
     }
+
+    auto last_points = get_tangent_points(
+        circles[circles.size() - 2].position, circles[circles.size() - 2].radius,
+        circles[circles.size() - 1].position, circles[circles.size() - 1].radius);
+    auto separate_points_last = separate_points(last_points->c2_p1, last_points->c2_p2, circles.size() - 2);
+    left_points.push_back(separate_points_last->left_point);
+    point_circles.push_back(Circle(SKIN_POINT_SIZE, separate_points_last->left_point, LEFT_COLOR));
+    right_points.push_back(separate_points_last->right_point);
+    point_circles.push_back(Circle(SKIN_POINT_SIZE, separate_points_last->right_point, RIGHT_COLOR));
+
+    delete last_points;
+    delete separate_points_last;
 
     for (auto i = 0; i < left_points.size() - 1; i++)
     {
         auto tanggents = calculate_tangents(
+            circles[i].position, circles[i].radius,
             circles[i + 1].position, circles[i + 1].radius,
-            circles[i + 2].position, circles[i + 2].radius,
             left_points[i], left_points[i + 1]);
 
-        lines.push_back(left_points[i]);
-        lines.push_back(left_points[i] + std::get<0>(tanggents));
-
-        lines.push_back(left_points[i + 1]);
-        lines.push_back(left_points[i + 1] + std::get<1>(tanggents));
+        // lines.push_back(left_points[i]);
+        // lines.push_back(left_points[i] + std::get<0>(tanggents));
+        //
+        // lines.push_back(left_points[i + 1]);
+        // lines.push_back(left_points[i + 1] + std::get<1>(tanggents));
 
         curves.push_back(HermiteCurve(
             left_points[i], left_points[i + 1],
@@ -428,15 +479,15 @@ void calculate_skin()
     for (auto i = 0; i < right_points.size() - 1; i++)
     {
         auto tanggents = calculate_tangents(
+            circles[i].position, circles[i].radius,
             circles[i + 1].position, circles[i + 1].radius,
-            circles[i + 2].position, circles[i + 2].radius,
             right_points[i], right_points[i + 1]);
 
-        lines.push_back(right_points[i]);
-        lines.push_back(right_points[i] + std::get<0>(tanggents));
-
-        lines.push_back(right_points[i + 1]);
-        lines.push_back(right_points[i + 1] + std::get<1>(tanggents));
+        // lines.push_back(right_points[i]);
+        // lines.push_back(right_points[i] + std::get<0>(tanggents));
+        //
+        // lines.push_back(right_points[i + 1]);
+        // lines.push_back(right_points[i + 1] + std::get<1>(tanggents));
 
         curves.push_back(HermiteCurve(
             right_points[i], right_points[i + 1],

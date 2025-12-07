@@ -20,6 +20,12 @@ glm::vec2 mouse_position = glm::vec2(0.0f);
 
 int holded_circle_index = -1;
 
+struct TouchingCircle
+{
+    float radius;
+    glm::vec2 position;
+};
+
 class Circle
 {
 public:
@@ -47,7 +53,7 @@ public:
 std::vector<Circle> circles;
 
 // Based on: https://math.stackexchange.com/questions/3100828/calculate-the-circle-that-touches-three-other-circles
-Circle * find_touching_circle(Circle *c1, Circle *c2, Circle *c3, int s1, int s2, int s3)
+TouchingCircle * find_touching_circle(Circle *c1, Circle *c2, Circle *c3, int s1, int s2, int s3)
 {
     float r1 = s1 * c1->radius;
     float r2 = s2 * c2->radius;
@@ -59,8 +65,6 @@ Circle * find_touching_circle(Circle *c1, Circle *c2, Circle *c3, int s1, int s2
     float y2 = c2->position.y;
     float x3 = c3->position.x;
     float y3 = c3->position.y;
-
-    fmt::println("r1={}, r2={}, r3={}", r1, r2, r3);
 
     float k_a = -glm::pow(r1, 2) + glm::pow(r2, 2) + glm::pow(x1, 2) - glm::pow(x2, 2) + glm::pow(y1, 2) - glm::pow(y2, 2);
     float k_b = -glm::pow(r1, 2) + glm::pow(r3, 2) + glm::pow(x1, 2) - glm::pow(x3, 2) + glm::pow(y1, 2) - glm::pow(y3, 2);
@@ -83,9 +87,97 @@ Circle * find_touching_circle(Circle *c1, Circle *c2, Circle *c3, int s1, int s2
     float x = a0 + a1 * r;
     float y = b0 + b1 * r;
 
-    return new Circle(r, glm::vec2(x, y));
+    return new TouchingCircle{r, glm::vec2(x, y)};
 }
 
+bool get_if_circles_touch_externally_or_internally(glm::vec2 common_circle_pos, float common_circle_radius, glm::vec2 circle_pos, float circle_radius)
+{
+    auto distance = glm::distance(circle_pos, common_circle_pos);
+    auto radius_diff = glm::abs(circle_radius - common_circle_radius);
+
+    if (glm::abs(distance - radius_diff) < 0.1f)
+    {
+        // Circles touch internally
+        return true;
+    }
+
+    // Circles touch externally (no need for further checks, since the circles are guaranteed to touch)
+    return false;
+}
+
+void find_curve_points_for_circle(int index)
+{
+    if (index <= 0 || index >= circles.size() - 1)
+    {
+        return;
+    }
+
+    int s2_counter = 0;
+    int s3_counter = 0;
+
+    int s1 = 1;
+    int s2 = 1;
+    int s3 = 1;
+
+    std::vector<glm::vec2> curve_points;
+
+    for (auto i = 0; i < 8; i++)
+    {
+        auto touching_circle = find_touching_circle(&circles[index - 1], &circles[index], &circles[index + 1], s1, s2, s3);
+
+        auto touching_point = touching_circle->position + glm::normalize(circles[index].position - touching_circle->position) * touching_circle->radius;
+
+        auto control_orientation = get_if_circles_touch_externally_or_internally(touching_circle->position, touching_circle->radius, circles[index].position, circles[index].radius);
+
+        auto all_same_orientation = true;
+
+        for (auto circle : { &circles[index - 1], &circles[index + 1] })
+        {
+            auto orientation = get_if_circles_touch_externally_or_internally(touching_circle->position, touching_circle->radius, circle->position, circle->radius);
+
+            if (orientation != control_orientation)
+            {
+                all_same_orientation = false;
+                break;
+            }
+        }
+
+        if (all_same_orientation)
+        {
+            curve_points.push_back(touching_point);
+        }
+
+        s2_counter++;
+        s3_counter++;
+
+        s1 *= -1;
+
+        if (s2_counter % 2 == 0)
+        {
+            s2 *= -1;
+        }
+
+        if (s3_counter % 4 == 0)
+        {
+            s3 *= -1;
+        }
+
+        delete touching_circle;
+    }
+
+    for (auto point : curve_points)
+    {
+        fmt::println("Curve point [{}]: x={}, y={}", index, point.x, point.y);
+    }
+}
+
+void calculate_skin()
+{
+    for (auto i = 1; i < circles.size() - 1; i++)
+    {
+        find_curve_points_for_circle(i);
+    }
+}
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
@@ -101,6 +193,8 @@ void cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
     if (holded_circle_index != -1)
     {
         circles[holded_circle_index].position = mouse_position;
+
+        calculate_skin();
     }
 }
 
@@ -122,6 +216,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         if (holded_circle_index == -1)
         {
             circles.push_back(Circle(50.0f, mouse_position));
+            calculate_skin();
         }
         return;
     }

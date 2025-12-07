@@ -323,6 +323,21 @@ glm::vec2 rotate_vector(glm::vec2 vec, float angle)
     return glm::mat2x2(cos, -sin, sin, cos) * vec;
 }
 
+glm::vec2 flip_when_facing_opposite(glm::vec2 vec, glm::vec2 check_against)
+{
+    float dot = vec.x * check_against.x + vec.y * check_against.y;
+    float det = vec.x * check_against.y - vec.y * check_against.x;
+
+    float angle = glm::atan(det, dot);
+
+    if (glm::abs(angle) > glm::radians(90.0f))
+    {
+        return -vec;
+    }
+
+    return vec;
+}
+
 std::tuple<glm::vec2, glm::vec2> calculate_tangents(glm::vec2 c1_pos, float r1, glm::vec2 c2_pos, float r2, glm::vec2 point1, glm::vec2 point2)
 {
     auto radical_line = get_radical_line(c1_pos, r1, c2_pos, r2);
@@ -335,18 +350,12 @@ std::tuple<glm::vec2, glm::vec2> calculate_tangents(glm::vec2 c1_pos, float r1, 
     auto p1_to_c1_vec = (c1_pos - point1) / glm::length(c1_pos - point1);
     auto p2_to_c2_vec = (c2_pos - point2) / glm::length(c2_pos - point2);
 
-    float direction = glm::dot(c2_pos - c1_pos, p1_to_c1_vec);
-
-    if (direction < 0)
-    {
-        p1_to_c1_vec = -p1_to_c1_vec;
-        p2_to_c2_vec = -p2_to_c2_vec;
-    }
-
     delete radical_line;
 
-    auto tangent1 = rotate_vector(p1_to_c1_vec, -90.0f) * 2.0f * radical_distance_a;
-    auto tangent2 = rotate_vector(p2_to_c2_vec, -90.0f) * 2.0f * radical_distance_b;
+    auto p1_to_p2_vec = point2 - point1;
+
+    auto tangent1 = flip_when_facing_opposite(rotate_vector(p1_to_c1_vec, -90.0f) * 2.0f * radical_distance_a, p1_to_p2_vec);
+    auto tangent2 = flip_when_facing_opposite(rotate_vector(p2_to_c2_vec, -90.0f) * 2.0f * radical_distance_b, p1_to_p2_vec);
 
     return std::make_tuple(tangent1, tangent2);
 }

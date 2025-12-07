@@ -144,8 +144,6 @@ std::vector<Circle> circles;
 std::vector<Circle> point_circles;
 std::vector<HermiteCurve> curves;
 
-std::vector<glm::vec2> lines;
-
 // Based on: https://math.stackexchange.com/questions/3100828/calculate-the-circle-that-touches-three-other-circles
 TouchingCircle * find_touching_circle(Circle *c1, Circle *c2, Circle *c3, int s1, int s2, int s3)
 {
@@ -175,6 +173,13 @@ TouchingCircle * find_touching_circle(Circle *c1, Circle *c2, Circle *c3, int s1
     // float C1 = a1 * (a0 - x1) + b1 * (b0 - y1) - r1;
     float C1 = a0 * a1 - a1 * x1 + b0 * b1 - b1 * y1 - r1;
     float C2 = glm::pow(a1, 2) + glm::pow(b1, 2) - 1;
+
+    auto root_inner = glm::pow(C1, 2) - C0 * C2;
+
+    if (root_inner < 0)
+    {
+        return nullptr;
+    }
 
     float r = (-glm::sqrt(glm::pow(C1, 2) - C0 * C2) - C1)/ C2;
 
@@ -228,6 +233,19 @@ std::tuple<glm::vec2, glm::vec2> find_curve_points_for_circle(int index)
     for (auto i = 0; i < 8; i++)
     {
         auto touching_circle = find_touching_circle(&circles[index - 1], &circles[index], &circles[index + 1], s1, s2, s3);
+
+        if (touching_circle == nullptr)
+        {
+            auto tangent_points = get_tangent_points(
+                circles[index].position, circles[index].radius,
+                circles[index + 1].position, circles[index + 1].radius);
+
+            auto result = std::make_tuple(tangent_points->c1_p1, tangent_points->c1_p2);
+
+            delete tangent_points;
+
+            return result;
+        }
 
         auto touching_point = touching_circle->position + glm::normalize(circles[index].position - touching_circle->position) * touching_circle->radius;
 
@@ -345,8 +363,6 @@ std::tuple<glm::vec2, glm::vec2> calculate_tangents(glm::vec2 c1_pos, float r1, 
     float radical_distance_a = (glm::abs(radical_line->a * point1.x + radical_line->b * point1.y + radical_line->c)) / glm::sqrt(glm::pow(radical_line->a, 2) + glm::pow(radical_line->b, 2));
     float radical_distance_b = (glm::abs(radical_line->a * point2.x + radical_line->b * point2.y + radical_line->c)) / glm::sqrt(glm::pow(radical_line->a, 2) + glm::pow(radical_line->b, 2));
 
-    fmt::println("c1: {}, {}, c2: {}, {}, a: {}, b: {}, c: {}", c1_pos.x, c1_pos.y, c2_pos.x, c2_pos.y, radical_line->a, radical_line->b, radical_line->c);
-
     auto p1_to_c1_vec = (c1_pos - point1) / glm::length(c1_pos - point1);
     auto p2_to_c2_vec = (c2_pos - point2) / glm::length(c2_pos - point2);
 
@@ -366,8 +382,6 @@ SeparatedPoints * separate_points(glm::vec2 point1, glm::vec2 point2, int index)
         circles[index].position, circles[index].radius,
         circles[index - 1].position, circles[index - 1].radius,
         circles[index + 1].position, circles[index + 1].radius);
-
-    point_circles.push_back(Circle(SKIN_POINT_SIZE, radical_center, glm::vec3(0.0f, 1.0f, 1.0f)));
 
     glm::vec2 to_check = circles[index].position - circles[index - 1].position;
     glm::vec2 check_against = circles[index + 1].position - circles[index - 1].position;
@@ -404,7 +418,7 @@ SeparatedPoints * separate_points(glm::vec2 point1, glm::vec2 point2, int index)
             right = (point1);
         }
         else
-    {
+        {
             left = (point1);
             right = (point2);
         }
@@ -415,13 +429,12 @@ SeparatedPoints * separate_points(glm::vec2 point1, glm::vec2 point2, int index)
 
 void calculate_skin()
 {
-    if (circles.size() < 4)
+    if (circles.size() < 2)
     {
         return;
     }
 
     curves.clear();
-    lines.clear();
     point_circles.clear();
 
     std::vector<glm::vec2> left_points;
@@ -473,12 +486,6 @@ void calculate_skin()
             circles[i + 1].position, circles[i + 1].radius,
             left_points[i], left_points[i + 1]);
 
-        // lines.push_back(left_points[i]);
-        // lines.push_back(left_points[i] + std::get<0>(tanggents));
-        //
-        // lines.push_back(left_points[i + 1]);
-        // lines.push_back(left_points[i + 1] + std::get<1>(tanggents));
-
         curves.push_back(HermiteCurve(
             left_points[i], left_points[i + 1],
             std::get<0>(tanggents), std::get<1>(tanggents),
@@ -491,12 +498,6 @@ void calculate_skin()
             circles[i].position, circles[i].radius,
             circles[i + 1].position, circles[i + 1].radius,
             right_points[i], right_points[i + 1]);
-
-        // lines.push_back(right_points[i]);
-        // lines.push_back(right_points[i] + std::get<0>(tanggents));
-        //
-        // lines.push_back(right_points[i + 1]);
-        // lines.push_back(right_points[i + 1] + std::get<1>(tanggents));
 
         curves.push_back(HermiteCurve(
             right_points[i], right_points[i + 1],
@@ -542,6 +543,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         if (holded_circle_index == -1)
         {
             circles.push_back(Circle(50.0f, mouse_position));
+            holded_circle_index = circles.size() - 1;
             calculate_skin();
         }
         return;
@@ -562,6 +564,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
             if (glm::distance(mouse_position, circle.position) <= circle.radius)
             {
                 circles.erase(circles.begin() + i);
+                calculate_skin();
                 break;
             }
         }
@@ -583,6 +586,8 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
         {
             circles[holded_circle_index].radius = MAX_CIRCLE_SIZE;
         }
+
+        calculate_skin();
     }
 }
 
@@ -703,35 +708,6 @@ void render_curves(unsigned int vbo, unsigned int vao, std::vector<HermiteCurve>
     }
 }
 
-void render_lines(unsigned int vbo, unsigned int vao, std::vector<glm::vec2> lines, GLint model_uniform)
-{
-    std::vector<float> vertex_data;
-
-    for (auto line_point : lines)
-    {
-        vertex_data.push_back(line_point.x);
-        vertex_data.push_back(line_point.y);
-        vertex_data.push_back(0.0f);
-        vertex_data.push_back(0.0f);
-        vertex_data.push_back(0.0f);
-    }
-
-    auto model = glm::mat4(1.0f);
-
-    glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-
-    glLineWidth(1.0f);
-
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, vertex_data.size() * sizeof(vertex_data[0]), &vertex_data[0], GL_STATIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    glBindVertexArray(vao);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glDrawArrays(GL_LINES, 0, vertex_data.size() / 5);
-    glBindVertexArray(0);
-}
-
 int main()
 {
     auto window = initialize();
@@ -761,9 +737,6 @@ int main()
     unsigned int hermite_vbo;
     unsigned int hermite_vao;
 
-    unsigned int line_vbo;
-    unsigned int line_vao;
-
     glGenBuffers(1, &circle_vbo);
     glGenVertexArrays(1, &circle_vao);
 
@@ -784,21 +757,9 @@ int main()
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(2 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    glGenBuffers(1, &line_vbo);
-    glGenVertexArrays(1, &line_vao);
-
-    glBindVertexArray(line_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, line_vbo);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(2 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
     circles = std::vector<Circle>();
     point_circles = std::vector<Circle>();
     curves = std::vector<HermiteCurve>();
-
-    lines = std::vector<glm::vec2>();
 
     while(!glfwWindowShouldClose(window))
     {
@@ -813,7 +774,6 @@ int main()
         render_circles(circle_vbo, circle_vao, circles, model_uniform);
         render_circles(circle_vbo, circle_vao, point_circles, model_uniform);
         render_curves(hermite_vbo, hermite_vao, curves, model_uniform);
-        render_lines(line_vbo, line_vao, lines, model_uniform);
 
         glfwSwapBuffers(window);
         glfwPollEvents();

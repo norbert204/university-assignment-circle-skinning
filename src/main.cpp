@@ -247,7 +247,8 @@ RadicalLine * get_radical_line(glm::vec2 c1_pos, float r1, glm::vec2 c2_pos, flo
 {
     float a = 2 * (c2_pos.x - c1_pos.x);
     float b = 2 * (c2_pos.y - c1_pos.y);
-    float c = (glm::pow(c1_pos.x, 2) + glm::pow(c2_pos.x, 2)) - (glm::pow(c1_pos.y, 2) + glm::pow(c2_pos.y, 2)) - (glm::pow(r1, 2) + glm::pow(r2, 2));
+    // float c = (glm::pow(c1_pos.x, 2) + glm::pow(c2_pos.x, 2)) - (glm::pow(c1_pos.y, 2) + glm::pow(c2_pos.y, 2)) - (glm::pow(r1, 2) + glm::pow(r2, 2));
+    float c = (glm::pow(c1_pos.x, 2) - glm::pow(c2_pos.x, 2)) + (glm::pow(c1_pos.y, 2) - glm::pow(c2_pos.y, 2)) - (glm::pow(r1, 2) + glm::pow(r2, 2));
 
     return new RadicalLine{a, b, c};
 }
@@ -283,22 +284,40 @@ glm::vec2 find_radical_center(glm::vec2 c1_pos, float r1, glm::vec2 c2_pos, floa
     return glm::vec2(x, y);
 }
 
+glm::vec2 rotate_vector(glm::vec2 vec, float angle)
+{
+    float rad = glm::radians(angle);
+
+    float cos = glm::cos(rad);
+    float sin = glm::sin(rad);
+
+    return glm::mat2x2(cos, -sin, sin, cos) * vec;
+}
+
 std::tuple<glm::vec2, glm::vec2> calculate_tangents(glm::vec2 c1_pos, float r1, glm::vec2 c2_pos, float r2, glm::vec2 point1, glm::vec2 point2)
 {
-    float d = glm::distance(c1_pos, c2_pos);
-
     auto radical_line = get_radical_line(c1_pos, r1, c2_pos, r2);
 
     float radical_distance_a = (glm::abs(radical_line->a * point1.x + radical_line->b * point1.y + radical_line->c)) / glm::sqrt(glm::pow(radical_line->a, 2) + glm::pow(radical_line->b, 2));
     float radical_distance_b = (glm::abs(radical_line->a * point2.x + radical_line->b * point2.y + radical_line->c)) / glm::sqrt(glm::pow(radical_line->a, 2) + glm::pow(radical_line->b, 2));
 
-    auto p1_to_c1_vec = glm::normalize(c1_pos - point1);
-    auto p2_to_c2_vec = glm::normalize(c2_pos - point2);
+    fmt::println("c1: {}, {}, c2: {}, {}, a: {}, b: {}, c: {}", c1_pos.x, c1_pos.y, c2_pos.x, c2_pos.y, radical_line->a, radical_line->b, radical_line->c);
+
+    auto p1_to_c1_vec = (c1_pos - point1) / glm::length(c1_pos - point1);
+    auto p2_to_c2_vec = (c2_pos - point2) / glm::length(c2_pos - point2);
+
+    float direction = glm::dot(c2_pos - c1_pos, p1_to_c1_vec);
+
+    if (direction < 0)
+    {
+        p1_to_c1_vec = -p1_to_c1_vec;
+        p2_to_c2_vec = -p2_to_c2_vec;
+    }
 
     delete radical_line;
 
-    auto tangent1 = glm::vec2(-p1_to_c1_vec.y, p1_to_c1_vec.x) * radical_distance_a;
-    auto tangent2 = glm::vec2(-p2_to_c2_vec.y, p2_to_c2_vec.x) * radical_distance_b;
+    auto tangent1 = rotate_vector(p1_to_c1_vec, -90.0f) * 2.0f * radical_distance_a;
+    auto tangent2 = rotate_vector(p2_to_c2_vec, -90.0f) * 2.0f * radical_distance_b;
 
     return std::make_tuple(tangent1, tangent2);
 }
@@ -326,8 +345,6 @@ void calculate_skin()
             circles[i - 1].position, circles[i - 1].radius,
             circles[i + 1].position, circles[i + 1].radius);
 
-        fmt::println("Radical center: ({}, {})", radical_center.x, radical_center.y);
-
         point_circles.push_back(Circle(SKIN_POINT_SIZE, radical_center, glm::vec3(0.0f, 1.0f, 1.0f)));
 
         glm::vec2 to_check = circles[i].position - circles[i - 1].position;
@@ -338,8 +355,6 @@ void calculate_skin()
 
         float angle = glm::atan(det, dot);
 
-        fmt::println("Angle: {}", angle);
-
         auto p1_radical_distance = glm::distance(radical_center, std::get<0>(points));
         auto p2_radical_distance = glm::distance(radical_center, std::get<1>(points));
 
@@ -348,7 +363,7 @@ void calculate_skin()
 
         if (angle < 0)
         {
-            if (p1_radical_distance > p2_radical_distance)
+            if (p1_radical_distance < p2_radical_distance)
             {
                 left = (std::get<0>(points));
                 right = (std::get<1>(points));
@@ -361,7 +376,7 @@ void calculate_skin()
         }
         else
         {
-            if (p1_radical_distance > p2_radical_distance)
+            if (p1_radical_distance < p2_radical_distance)
             {
                 left = (std::get<1>(points));
                 right = (std::get<0>(points));
@@ -394,8 +409,8 @@ void calculate_skin()
     for (auto i = 0; i < left_points.size() - 1; i++)
     {
         auto tanggents = calculate_tangents(
-            circles[i].position, circles[i].radius,
             circles[i + 1].position, circles[i + 1].radius,
+            circles[i + 2].position, circles[i + 2].radius,
             left_points[i], left_points[i + 1]);
 
         lines.push_back(left_points[i]);
@@ -413,9 +428,15 @@ void calculate_skin()
     for (auto i = 0; i < right_points.size() - 1; i++)
     {
         auto tanggents = calculate_tangents(
-            circles[i].position, circles[i].radius,
             circles[i + 1].position, circles[i + 1].radius,
+            circles[i + 2].position, circles[i + 2].radius,
             right_points[i], right_points[i + 1]);
+
+        lines.push_back(right_points[i]);
+        lines.push_back(right_points[i] + std::get<0>(tanggents));
+
+        lines.push_back(right_points[i + 1]);
+        lines.push_back(right_points[i + 1] + std::get<1>(tanggents));
 
         curves.push_back(HermiteCurve(
             right_points[i], right_points[i + 1],

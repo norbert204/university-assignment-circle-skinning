@@ -48,6 +48,21 @@ public:
             vertices.push_back(glm::vec2(glm::sin(alpha * i), glm::cos(alpha * i)));
         }
     }
+    std::vector<float> get_vertex_data()
+    {
+        std::vector<float> data;
+
+        for (auto vertex : vertices)
+        {
+            data.push_back(vertex.x);
+            data.push_back(vertex.y);
+            data.push_back(0.0f);
+            data.push_back(1.0f);
+            data.push_back(0.0f);
+        }
+
+        return data;
+    }
 };
 
 std::vector<Circle> circles;
@@ -339,15 +354,17 @@ void render_circles(unsigned int vbo, unsigned int vao, std::vector<Circle> circ
         model = glm::translate(model, glm::vec3(circle.position, 0.0f));
         model = glm::scale(model, glm::vec3(circle.radius, circle.radius, 1.0f));
 
+        auto vertex_data = circle.get_vertex_data();
+
         glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model));
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferData(GL_ARRAY_BUFFER, circle.vertices.size() * sizeof(circle.vertices[0]), &circle.vertices[0], GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, vertex_data.size() * sizeof(vertex_data[0]), &vertex_data[0], GL_STATIC_DRAW);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
 
         glBindVertexArray(vao);
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glDrawArrays(GL_TRIANGLES, 0, circle.vertices.size());
+        glDrawArrays(GL_TRIANGLES, 0, vertex_data.size());
         glBindVertexArray(0);
     }
 }
@@ -383,8 +400,10 @@ int main()
 
     glBindVertexArray(circle_vao);
     glBindBuffer(GL_ARRAY_BUFFER, circle_vbo);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
 
     circles = std::vector<Circle>();
 

@@ -247,7 +247,7 @@ RadicalLine * get_radical_line(glm::vec2 c1_pos, float r1, glm::vec2 c2_pos, flo
 {
     float a = 2 * (c2_pos.x - c1_pos.x);
     float b = 2 * (c2_pos.y - c1_pos.y);
-    float c = (glm::pow(c1_pos.x, 2) - glm::pow(c2_pos.x, 2)) + (glm::pow(c1_pos.y, 2) - glm::pow(c2_pos.y, 2)) - (glm::pow(r1, 2) + glm::pow(r2, 2));
+    float c = (glm::pow(c1_pos.x, 2) + glm::pow(c2_pos.x, 2)) - (glm::pow(c1_pos.y, 2) + glm::pow(c2_pos.y, 2)) - (glm::pow(r1, 2) + glm::pow(r2, 2));
 
     return new RadicalLine{a, b, c};
 }
@@ -262,7 +262,7 @@ glm::vec2 find_radical_center(glm::vec2 c1_pos, float r1, glm::vec2 c2_pos, floa
     float y3 = c3_pos.y;
 
     auto radical_line1 = get_radical_line(c1_pos, r1, c2_pos, r2);
-    auto radical_line2 = get_radical_line(c1_pos, r1, c3_pos, r3);
+    auto radical_line2 = get_radical_line(c2_pos, r1, c3_pos, r3);
 
     float a1 = radical_line1->a;
     float b1 = radical_line1->b;
@@ -326,6 +326,10 @@ void calculate_skin()
             circles[i - 1].position, circles[i - 1].radius,
             circles[i + 1].position, circles[i + 1].radius);
 
+        fmt::println("Radical center: ({}, {})", radical_center.x, radical_center.y);
+
+        point_circles.push_back(Circle(SKIN_POINT_SIZE, radical_center, glm::vec3(0.0f, 1.0f, 1.0f)));
+
         glm::vec2 to_check = circles[i].position - circles[i - 1].position;
         glm::vec2 check_against = circles[i + 1].position - circles[i - 1].position;
 
@@ -334,15 +338,17 @@ void calculate_skin()
 
         float angle = glm::atan(det, dot);
 
+        fmt::println("Angle: {}", angle);
+
         auto p1_radical_distance = glm::distance(radical_center, std::get<0>(points));
         auto p2_radical_distance = glm::distance(radical_center, std::get<1>(points));
 
         glm::vec2 left;
         glm::vec2 right;
 
-        if (angle > 0)
+        if (angle < 0)
         {
-            if (p1_radical_distance < p2_radical_distance)
+            if (p1_radical_distance > p2_radical_distance)
             {
                 left = (std::get<0>(points));
                 right = (std::get<1>(points));
@@ -355,7 +361,7 @@ void calculate_skin()
         }
         else
         {
-            if (p1_radical_distance < p2_radical_distance)
+            if (p1_radical_distance > p2_radical_distance)
             {
                 left = (std::get<1>(points));
                 right = (std::get<0>(points));
@@ -394,6 +400,9 @@ void calculate_skin()
 
         lines.push_back(left_points[i]);
         lines.push_back(left_points[i] + std::get<0>(tanggents));
+
+        lines.push_back(left_points[i + 1]);
+        lines.push_back(left_points[i + 1] + std::get<1>(tanggents));
 
         curves.push_back(HermiteCurve(
             left_points[i], left_points[i + 1],

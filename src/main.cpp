@@ -3,6 +3,7 @@
 #include <GLFW/glfw3.h>
 #include <fmt/core.h>
 #include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/quaternion_trigonometric.hpp>
 #include <glm/geometric.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
@@ -32,10 +33,12 @@ public:
     float radius;
     glm::vec2 position;
     std::vector<glm::vec2> vertices;
-    Circle(float r, glm::vec2 pos)
+    glm::vec3 color;
+    Circle(float r, glm::vec2 pos, glm::vec3 color = glm::vec3(1.0f))
     {
         this->position = pos;
         this->radius = r;
+        this->color = color;
 
         vertices = std::vector<glm::vec2>();
 
@@ -56,9 +59,9 @@ public:
         {
             data.push_back(vertex.x);
             data.push_back(vertex.y);
-            data.push_back(0.0f);
-            data.push_back(1.0f);
-            data.push_back(0.0f);
+            data.push_back(color.x);
+            data.push_back(color.y);
+            data.push_back(color.z);
         }
 
         return data;
@@ -66,6 +69,7 @@ public:
 };
 
 std::vector<Circle> circles;
+std::vector<Circle> point_circles;
 
 // Based on: https://math.stackexchange.com/questions/3100828/calculate-the-circle-that-touches-three-other-circles
 TouchingCircle * find_touching_circle(Circle *c1, Circle *c2, Circle *c3, int s1, int s2, int s3)
@@ -120,13 +124,8 @@ bool get_if_circles_touch_externally_or_internally(glm::vec2 common_circle_pos, 
     return false;
 }
 
-void find_curve_points_for_circle(int index)
+std::tuple<glm::vec2, glm::vec2> find_curve_points_for_circle(int index)
 {
-    if (index <= 0 || index >= circles.size() - 1)
-    {
-        return;
-    }
-
     int s2_counter = 0;
     int s3_counter = 0;
 
@@ -180,17 +179,98 @@ void find_curve_points_for_circle(int index)
         delete touching_circle;
     }
 
-    for (auto point : curve_points)
-    {
-        fmt::println("Curve point [{}]: x={}, y={}", index, point.x, point.y);
-    }
+    return std::make_tuple(curve_points[0], curve_points[1]);
 }
+
+glm::vec2 find_radical_center(glm::vec2 c1_pos, float r1, glm::vec2 c2_pos, float r2, glm::vec2 c3_pos, float r3)
+{
+    float x1 = c1_pos.x;
+    float y1 = c1_pos.y;
+    float x2 = c2_pos.x;
+    float y2 = c2_pos.y;
+    float x3 = c3_pos.x;
+    float y3 = c3_pos.y;
+
+    float a1 = 2 * (x2 - x1);
+    float b1 = 2 * (y2 - y1);
+    float c1 = (glm::pow(x2, 2) - glm::pow(x1, 2)) + (glm::pow(y2, 2) - glm::pow(y1, 2)) + (glm::pow(r1, 2) - glm::pow(r2, 2));
+
+    float a2 = 2 * (x3 - x1);
+    float b2 = 2 * (y3 - y1);
+    float c2 = (glm::pow(x3, 2) - glm::pow(x1, 2)) + (glm::pow(y3, 2) - glm::pow(y1, 2)) + (glm::pow(r1, 2) - glm::pow(r3, 2));
+
+    float d = a1 * b2 - a2 * b1;
+
+    float x = (c1 * b2 - c2 * b1) / d;
+    float y = (a1 * c2 - a2 * c1) / d;
+
+    return glm::vec2(x, y);
+}
+
 
 void calculate_skin()
 {
+    std::vector<glm::vec2> left_points;
+    std::vector<glm::vec2> right_points;
+    // left_points.clear();
+    // right_points.clear();
+
     for (auto i = 1; i < circles.size() - 1; i++)
     {
-        find_curve_points_for_circle(i);
+        auto points = find_curve_points_for_circle(i);
+
+        auto radical_center = find_radical_center(
+            circles[i].position, circles[i].radius,
+            circles[i - 1].position, circles[i - 1].radius,
+            circles[i + 1].position, circles[i + 1].radius);
+
+        glm::vec2 to_check = circles[i].position - circles[i - 1].position;
+        glm::vec2 check_against = circles[i + 1].position - circles[i - 1].position;
+
+        float dot = to_check.x * check_against.x + to_check.y * check_against.y;
+        float det = to_check.x * check_against.y - to_check.y * check_against.x;
+
+        float angle = glm::atan(det, dot);
+
+        auto p1_radical_distance = glm::distance(radical_center, std::get<0>(points));
+        auto p2_radical_distance = glm::distance(radical_center, std::get<1>(points));
+
+        if (angle > 0)
+        {
+            if (p1_radical_distance < p2_radical_distance)
+            {
+                left_points.push_back(std::get<0>(points));
+                right_points.push_back(std::get<1>(points));
+            }
+            else
+            {
+                left_points.push_back(std::get<1>(points));
+                right_points.push_back(std::get<0>(points));
+            }
+        }
+        else
+        {
+            if (p1_radical_distance < p2_radical_distance)
+            {
+                left_points.push_back(std::get<1>(points));
+                right_points.push_back(std::get<0>(points));
+            }
+            else
+            {
+                left_points.push_back(std::get<0>(points));
+                right_points.push_back(std::get<1>(points));
+            }
+        }
+    }
+
+    for (auto point : left_points)
+    {
+        point_circles.push_back(Circle(5.0f, point, glm::vec3(1.0f, 0.0f, 0.0f)));
+    }
+
+    for (auto point : right_points)
+    {
+        point_circles.push_back(Circle(5.0f, point, glm::vec3(0.0f, 0.0f, 1.0f)));
     }
 }
 
@@ -406,6 +486,7 @@ int main()
     glEnableVertexAttribArray(1);
 
     circles = std::vector<Circle>();
+    point_circles = std::vector<Circle>();
 
     while(!glfwWindowShouldClose(window))
     {
@@ -418,6 +499,7 @@ int main()
         glUniformMatrix4fv(projection_uniform, 1, GL_FALSE, glm::value_ptr(projection));
 
         render_circles(circle_vbo, circle_vao, circles, model_uniform);
+        render_circles(circle_vbo, circle_vao, point_circles, model_uniform);
 
         glfwSwapBuffers(window);
         glfwPollEvents();

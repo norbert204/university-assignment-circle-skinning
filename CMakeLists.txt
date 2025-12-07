@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-add_compile_options(-lglfw3 -lGL -lX11 -lpthread -lXrandr -lXi -ldl)
+add_compile_options(-lglfw3 -lGL -lpthread -lXi -ldl)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

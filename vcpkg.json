@@ -7,12 +7,7 @@
         "gl-api-44"
       ]
     },
-    {
-      "name": "glfw3",
-      "features": [
-        "wayland"
-      ]
-    },
+    "glfw3",
     "glm",
     "opengl",
     "freetype"

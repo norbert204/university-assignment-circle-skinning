@@ -267,11 +267,11 @@ glm::vec2 find_radical_center(glm::vec2 c1_pos, float r1, glm::vec2 c2_pos, floa
 
     float a1 = radical_line1->a;
     float b1 = radical_line1->b;
-    float c1 = radical_line1->c;
+    float c1 = radical_line1->c * -1;
 
     float a2 = radical_line2->a;
     float b2 = radical_line2->b;
-    float c2 = radical_line2->c;
+    float c2 = radical_line2->c * -1;
 
     float d = a1 * b2 - a2 * b1;
 
